@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>visitor logs</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111;
+    --border: #222;
+    --dim: #444;
+    --muted: #888;
+    --text: #ccc;
+    --bright: #eee;
+    --accent: #00ff88;
+  }
+  body { background: var(--bg); color: var(--text); font: 13px/1.5 'JetBrains Mono', 'Fira Mono', monospace; padding: 24px; }
+  h1 { color: var(--bright); font-size: 14px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 4px; }
+  .sub { color: var(--muted); font-size: 11px; margin-bottom: 20px; }
+  .bar { display: flex; gap: 8px; margin-bottom: 16px; }
+  input {
+    background: var(--surface); border: 1px solid var(--border); color: var(--bright);
+    padding: 6px 10px; font: inherit; flex: 1; outline: none; border-radius: 2px;
+  }
+  input:focus { border-color: var(--accent); }
+  button {
+    background: var(--accent); color: #000; border: none; padding: 6px 14px;
+    font: inherit; font-weight: 700; cursor: pointer; border-radius: 2px; letter-spacing: .04em;
+  }
+  button:hover { opacity: .85; }
+  .stats { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+  .stat { background: var(--surface); border: 1px solid var(--border); padding: 10px 16px; border-radius: 2px; }
+  .stat-val { font-size: 20px; color: var(--accent); font-weight: 700; }
+  .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { color: var(--muted); text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
+  td { padding: 7px 10px; border-bottom: 1px solid #181818; vertical-align: top; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  tr:hover td { background: #141414; }
+  .ts { color: var(--dim); font-size: 10px; }
+  .ip { color: var(--accent); }
+  .ua { color: var(--muted); max-width: 300px; }
+  .path { color: #7eb8f7; }
+  .ref { color: #c0a0f0; }
+  .err { color: #ff5555; padding: 12px; }
+  .empty { color: var(--dim); padding: 24px; text-align: center; }
+  #status { color: var(--muted); font-size: 11px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<h1>// visitor logs</h1>
+<p class="sub">last 500 hits · newest first</p>
+
+<div class="bar">
+  <input id="secret" type="password" placeholder="secret key" />
+  <button onclick="load()">fetch</button>
+  <button onclick="clear_logs()" style="background:#ff5555">clear</button>
+</div>
+
+<div id="status"></div>
+<div class="stats" id="stats" style="display:none">
+  <div class="stat"><div class="stat-val" id="s-total">0</div><div class="stat-label">total</div></div>
+  <div class="stat"><div class="stat-val" id="s-uniq">0</div><div class="stat-label">unique IPs</div></div>
+  <div class="stat"><div class="stat-val" id="s-today">0</div><div class="stat-label">today</div></div>
+  <div class="stat"><div class="stat-val" id="s-bots">0</div><div class="stat-label">bots</div></div>
+</div>
+
+<div id="out"></div>
+
+<script>
+const BOT_RE = /bot|crawl|spider|slurp|mediapartners|headless|python|curl|wget|scrapy|httpclient/i;
+
+async function load() {
+  const s = document.getElementById("secret").value.trim();
+  if (!s) return;
+  document.getElementById("status").textContent = "loading...";
+  document.getElementById("out").innerHTML = "";
+
+  try {
+    const r = await fetch(`/api/log?secret=${encodeURIComponent(s)}`);
+    if (!r.ok) { document.getElementById("status").textContent = "bad secret"; return; }
+    const logs = await r.json();
+    render(logs);
+  } catch(e) {
+    document.getElementById("out").innerHTML = `<div class="err">error: ${e.message}</div>`;
+  }
+}
+
+function render(logs) {
+  const today = new Date().toISOString().slice(0, 10);
+  const ips = new Set(logs.map(l => l.ip));
+  const todayLogs = logs.filter(l => l.ts.startsWith(today));
+  const bots = logs.filter(l => BOT_RE.test(l.ua || ""));
+
+  document.getElementById("s-total").textContent = logs.length;
+  document.getElementById("s-uniq").textContent = ips.size;
+  document.getElementById("s-today").textContent = todayLogs.length;
+  document.getElementById("s-bots").textContent = bots.length;
+  document.getElementById("stats").style.display = "flex";
+  document.getElementById("status").textContent = `${logs.length} entries`;
+
+  if (!logs.length) {
+    document.getElementById("out").innerHTML = '<div class="empty">no logs yet</div>';
+    return;
+  }
+
+  const rows = logs.map(l => {
+    const ua = l.ua || "";
+    const bot = BOT_RE.test(ua) ? "🤖 " : "";
+    return `<tr>
+      <td class="ts">${l.ts.replace("T"," ").slice(0,19)}</td>
+      <td class="ip">${l.ip}</td>
+      <td class="path">${l.path || "—"}</td>
+      <td class="ua" title="${esc(ua)}">${bot}${esc(ua.slice(0,80))}</td>
+      <td class="ref" title="${esc(l.ref||"")}">${l.ref ? esc(l.ref.slice(0,50)) : "—"}</td>
+      <td>${l.lang || "—"}</td>
+      <td>${l.screen || "—"}</td>
+      <td>${l.tz || "—"}</td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("out").innerHTML = `
+    <table>
+      <thead><tr>
+        <th>time</th><th>ip</th><th>path</th><th>user-agent</th>
+        <th>referrer</th><th>lang</th><th>screen</th><th>tz</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+async function clear_logs() {
+  if (!confirm("delete all logs?")) return;
+  const s = document.getElementById("secret").value.trim();
+  await fetch(`/api/log?secret=${encodeURIComponent(s)}&clear=1`, { method: "DELETE" });
+  location.reload();
+}
+
+function esc(s) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+document.getElementById("secret").addEventListener("keydown", e => e.key === "Enter" && load());
+</script>
+</body>
+</html>
