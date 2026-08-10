@@ -9,8 +9,6 @@ export default async function handler(req, res) {
 
   // GET: fetch logs
   if (req.method === "GET") {
-    const secret = req.query.secret;
-    if (secret !== process.env.LOG_SECRET) return res.status(401).json({ error: "nope" });
     const logs = await kv.lrange("visits", 0, 499);
     return res.status(200).json(logs.map(l => JSON.parse(l)));
   }
