@@ -53,7 +53,6 @@
 <p class="sub">last 500 hits · newest first</p>
 
 <div class="bar">
-  <input id="secret" type="password" placeholder="secret key" />
   <button onclick="load()">fetch</button>
   <button onclick="clear_logs()" style="background:#ff5555">clear</button>
 </div>
@@ -72,14 +71,12 @@
 const BOT_RE = /bot|crawl|spider|slurp|mediapartners|headless|python|curl|wget|scrapy|httpclient/i;
 
 async function load() {
-  const s = document.getElementById("secret").value.trim();
-  if (!s) return;
   document.getElementById("status").textContent = "loading...";
   document.getElementById("out").innerHTML = "";
 
   try {
-    const r = await fetch(`/api/log?secret=${encodeURIComponent(s)}`);
-    if (!r.ok) { document.getElementById("status").textContent = "bad secret"; return; }
+    const r = await fetch(`/api/log`);
+    if (!r.ok) { document.getElementById("status").textContent = "fetch failed"; return; }
     const logs = await r.json();
     render(logs);
   } catch(e) {
@@ -132,14 +129,13 @@ function render(logs) {
 
 async function clear_logs() {
   if (!confirm("delete all logs?")) return;
-  const s = document.getElementById("secret").value.trim();
-  await fetch(`/api/log?secret=${encodeURIComponent(s)}&clear=1`, { method: "DELETE" });
+  await fetch(`/api/log?clear=1`, { method: "DELETE" });
   location.reload();
 }
 
 function esc(s) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
-document.getElementById("secret").addEventListener("keydown", e => e.key === "Enter" && load());
+load();
 </script>
 </body>
 </html>
